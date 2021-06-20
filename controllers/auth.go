@@ -21,7 +21,7 @@ func StartOAuth(c *gin.Context) {
 	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+hd+"&response_type=code&scope=email+profile+openid&redirect_uri="+redirectUrl+"&client_id="+clientId)
 }
 
-type SuccessFunc func(c *gin.Context)
+type SuccessFunc func(c *gin.Context, user models.GoogleUser)
 
 func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 	oauth_code := c.Query("code")
@@ -65,5 +65,5 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 	// We verified the user being allowed to login
 	// Now pass it back to have the app handle
 	// the specific login
-	callback(c)
+	callback(c, userData)
 }
