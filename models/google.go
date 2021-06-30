@@ -18,3 +18,12 @@ type GoogleUser struct {
 	Locale        string `json:"locale"`
 	Domain        string `json:"hd"`
 }
+
+// Not all are implemented
+type GoogleCorpUser struct {
+	Id                    string `json:"id"`
+	CustomerId            string `json:"customerId"`
+	Directory             string `json:"orgUnitPath"`
+	IsAdmin               bool   `json:"isAdmin"`
+	ChangePasswordAtLogin bool   `json:"changePasswordAtNextLogin"`
+}

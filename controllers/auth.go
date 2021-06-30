@@ -3,6 +3,7 @@ package controllers
 import (
 	"io"
 	"os"
+	"strings"
 
 	"encoding/json"
 
@@ -10,6 +11,7 @@ import (
 	"net/url"
 
 	"github.com/factorycampus/go-google-corp-auth/models"
+	"github.com/factorycampus/go-google-corp-auth/security"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,7 +20,7 @@ func StartOAuth(c *gin.Context) {
 	clientId := os.Getenv("G_OAUTH_CLIENT")
 	redirectUrl := os.Getenv("G_OAUTH_REDIRECT_URL")
 	hd := os.Getenv("G_OAUTH_DOMAIN")
-	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+hd+"&response_type=code&scope=email+profile+openid&redirect_uri="+redirectUrl+"&client_id="+clientId)
+	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+hd+"&response_type=code&scope=email+profile+openid+https://www.googleapis.com/auth/admin.directory.user.readonly&redirect_uri="+redirectUrl+"&client_id="+clientId)
 }
 
 type SuccessFunc func(c *gin.Context, user models.GoogleUser)
@@ -60,6 +62,25 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 	if userData.Domain != os.Getenv("G_OAUTH_DOMAIN") {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": "Google account is not authorized to login!"})
 		return
+	}
+
+	if os.Getenv("G_OAUTH_DIRECTORY") != "" {
+		serverAuth := security.ServerAuthToken()
+		reqd, _ := http.NewRequest("GET", "https://admin.googleapis.com/admin/directory/v1/users/"+userData.Email, nil)
+		reqd.Header.Add("Authorization", "Bearer "+serverAuth.AccessToken)
+		respd, errd := http.DefaultClient.Do(reqd)
+		if errd != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "fail", "message": "Could not get Google directory response"})
+			return
+		}
+		defer resp.Body.Close()
+		responsed, errd := io.ReadAll(respd.Body)
+		var userData models.GoogleCorpUser
+		json.Unmarshal([]byte(responsed), &userData)
+		if !strings.Contains(os.Getenv("G_OAUTH_DIRECTORY"), userData.Directory) {
+			c.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": "Access Denied"})
+			return
+		}
 	}
 
 	// We verified the user being allowed to login
