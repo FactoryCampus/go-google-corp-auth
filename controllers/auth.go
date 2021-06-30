@@ -77,7 +77,14 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 		responsed, errd := io.ReadAll(respd.Body)
 		var userData models.GoogleCorpUser
 		json.Unmarshal([]byte(responsed), &userData)
-		if !strings.Contains(os.Getenv("G_OAUTH_DIRECTORY"), userData.Directory) {
+		// Check if any path matches
+		allowed := false
+		for _, element := range strings.Split(os.Getenv("G_OAUTH_DIRECTORY"), ",") {
+			if element == userData.Directory {
+				allowed = true
+			}
+		}
+		if !allowed {
 			c.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": "Access Denied"})
 			return
 		}
