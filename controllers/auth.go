@@ -20,7 +20,7 @@ func StartOAuth(c *gin.Context) {
 	clientId := os.Getenv("G_OAUTH_CLIENT")
 	redirectUrl := os.Getenv("G_OAUTH_REDIRECT_URL")
 	hd := os.Getenv("G_OAUTH_DOMAIN")
-	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+hd+"&response_type=code&scope=email+profile+openid+https://www.googleapis.com/auth/admin.directory.user.readonly&redirect_uri="+redirectUrl+"&client_id="+clientId)
+	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+hd+"&response_type=code&scope=email+profile+openid&redirect_uri="+redirectUrl+"&client_id="+clientId)
 }
 
 type SuccessFunc func(c *gin.Context, user models.GoogleUser)
