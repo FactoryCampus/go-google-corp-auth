@@ -16,9 +16,16 @@ import (
 	"time"
 )
 
+var currentLogin models.GoogleResponse
+var end int
+
 func ServerAuthToken() models.GoogleResponse {
-	token := createJWT()
-	return doAuthRequest(token)
+	if currentLogin.AccessToken == "" || end-60 < int(time.Now().Unix()) {
+		token := createJWT()
+		currentLogin = doAuthRequest(token)
+		end = int(time.Now().Unix()) + currentLogin.ExpiresIn
+	}
+	return currentLogin
 }
 
 func createJWT() string {
@@ -65,5 +72,6 @@ func doAuthRequest(jwt string) models.GoogleResponse {
 	response, err := io.ReadAll(resp.Body)
 	var loginData models.GoogleResponse
 	json.Unmarshal([]byte(response), &loginData)
+	print("Logged In Service Account\n")
 	return loginData
 }
