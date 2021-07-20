@@ -23,7 +23,7 @@ func StartOAuth(c *gin.Context) {
 	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+hd+"&response_type=code&scope=email+profile+openid&redirect_uri="+redirectUrl+"&client_id="+clientId)
 }
 
-type SuccessFunc func(c *gin.Context, user models.GoogleUser)
+type SuccessFunc func(c *gin.Context, user models.GoogleUser, hasOrgData bool, orgUser models.GoogleCorpUser)
 
 func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 	oauth_code := c.Query("code")
@@ -64,6 +64,8 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 		return
 	}
 
+	var userOrgData models.GoogleCorpUser
+	hasOrgData := false
 	if os.Getenv("G_OAUTH_DIRECTORY") != "" {
 		serverAuth := security.ServerAuthToken()
 		reqd, _ := http.NewRequest("GET", "https://admin.googleapis.com/admin/directory/v1/users/"+userData.Email, nil)
@@ -75,12 +77,11 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 		}
 		defer resp.Body.Close()
 		responsed, errd := io.ReadAll(respd.Body)
-		var userData models.GoogleCorpUser
-		json.Unmarshal([]byte(responsed), &userData)
+		json.Unmarshal([]byte(responsed), &userOrgData)
 		// Check if any path matches
 		allowed := false
 		for _, element := range strings.Split(os.Getenv("G_OAUTH_DIRECTORY"), ",") {
-			if element == userData.Directory {
+			if element == userOrgData.Directory {
 				allowed = true
 			}
 		}
@@ -88,10 +89,12 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 			c.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": "Access Denied"})
 			return
 		}
+
+		hasOrgData = true
 	}
 
 	// We verified the user being allowed to login
 	// Now pass it back to have the app handle
 	// the specific login
-	callback(c, userData)
+	callback(c, userData, hasOrgData, userOrgData)
 }

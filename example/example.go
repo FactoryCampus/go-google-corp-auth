@@ -11,12 +11,14 @@ func main() {
 
 	r.GET("/g-oauth/", goauth.StartOAuth)
 	r.GET("/g-oauth/complete", func(c *gin.Context) {
-		goauth.CompleteOAuth(c, func(c *gin.Context, userData gdata.GoogleUser) {
+		goauth.CompleteOAuth(c, func(c *gin.Context, userData gdata.GoogleUser, hasOrgData bool, userOrgData gdata.GoogleCorpUser) {
 			c.JSON(200, gin.H{
-				"message":   "Logged in!",
-				"givenName": userData.GivenName,
-				"lastName":  userData.FamilyName,
-				"email":     userData.Email,
+				"message":            "Logged in!",
+				"givenName":          userData.GivenName,
+				"lastName":           userData.FamilyName,
+				"isDirectoryRequest": hasOrgData,
+				"isAdmin":            userOrgData.IsAdmin,
+				"email":              userData.Email,
 			})
 		})
 	})
