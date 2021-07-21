@@ -77,6 +77,9 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 		}
 		defer resp.Body.Close()
 		responsed, errd := io.ReadAll(respd.Body)
+		if respd.StatusCode != 200 {
+			panic(string(responsed))
+		}
 		json.Unmarshal([]byte(responsed), &userOrgData)
 		// Check if any path matches
 		allowed := false
