@@ -1,4 +1,4 @@
-package controllers
+package auth
 
 import (
 	"io"
@@ -16,22 +16,48 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func StartOAuth(c *gin.Context) {
-	clientId := os.Getenv("G_OAUTH_CLIENT")
-	redirectUrl := os.Getenv("G_OAUTH_REDIRECT_URL")
-	hd := os.Getenv("G_OAUTH_DOMAIN")
-	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+hd+"&response_type=code&scope=email+profile+openid&redirect_uri="+redirectUrl+"&client_id="+clientId)
+// They have json names so that you
+// can more easily read them from json
+type GoGoogleCorpAuth struct {
+	ClientID             string                                        `json:"client_id"`
+	RedirectURL          string                                        `json:"redirect_url"`
+	Domain               string                                        `json:"domain"`
+	ClientSecret         string                                        `json:"client_secret"`
+	DoDirectoryRequest   bool                                          `json:"do_directory_request"`
+	Directories          []string                                      `json:"directories"`
+	DirectoryCredentials security.GoGoogleCorpAuthDirectoryCredentials `json:"directory_creds"`
+}
+
+// Default returns "old" environment variable way
+func Default() GoGoogleCorpAuth {
+	return GoGoogleCorpAuth{
+		ClientID:           os.Getenv("G_OAUTH_CLIENT"),
+		RedirectURL:        os.Getenv("G_OAUTH_REDIRECT_URL"),
+		Domain:             os.Getenv("G_OAUTH_DOMAIN"),
+		ClientSecret:       os.Getenv("G_OAUTH_KEY"),
+		DoDirectoryRequest: os.Getenv("G_OAUTH_DIRECTORY") != "",
+		Directories:        strings.Split(os.Getenv("G_OAUTH_DIRECTORY"), ","),
+		DirectoryCredentials: security.GoGoogleCorpAuthDirectoryCredentials{
+			ServiceAccountMail:       os.Getenv("G_OAUTH_DIRECTORY_SA_EMAIL"),
+			ServiceAccountPrivateKey: os.Getenv("G_OAUTH_DIRECTORY_PRIVATEKEY"),
+			AdminAcccountMail:        os.Getenv("G_OAUTH_DIRECTORY_USER_EMAIL"),
+		},
+	}
+}
+
+func (i GoGoogleCorpAuth) StartOAuth(c *gin.Context) {
+	c.Redirect(http.StatusFound, "https://accounts.google.com/o/oauth2/v2/auth?hd="+i.Domain+"&response_type=code&scope=email+profile+openid&redirect_uri="+i.RedirectURL+"&client_id="+i.ClientID)
 }
 
 type SuccessFunc func(c *gin.Context, user models.GoogleUser, hasOrgData bool, orgUser models.GoogleCorpUser)
 
-func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
+func (i *GoGoogleCorpAuth) CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 	oauth_code := c.Query("code")
 	resp, err := http.PostForm("https://oauth2.googleapis.com/token", url.Values{
 		"code":          {oauth_code},
-		"client_id":     {os.Getenv("G_OAUTH_CLIENT")},
-		"client_secret": {os.Getenv("G_OAUTH_KEY")},
-		"redirect_uri":  {os.Getenv("G_OAUTH_REDIRECT_URL")},
+		"client_id":     {i.ClientID},
+		"client_secret": {i.ClientSecret},
+		"redirect_uri":  {i.RedirectURL},
 		"grant_type":    {"authorization_code"},
 	})
 	if err != nil {
@@ -59,15 +85,15 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 	mailResponse, mailErr := io.ReadAll(mailResp.Body)
 	var userData models.GoogleUser
 	json.Unmarshal([]byte(mailResponse), &userData)
-	if userData.Domain != os.Getenv("G_OAUTH_DOMAIN") {
+	if userData.Domain != i.Domain {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "fail", "message": "Google account is not authorized to login!"})
 		return
 	}
 
 	var userOrgData models.GoogleCorpUser
 	hasOrgData := false
-	if os.Getenv("G_OAUTH_DIRECTORY") != "" {
-		serverAuth := security.ServerAuthToken()
+	if i.DoDirectoryRequest {
+		serverAuth := security.ServerAuthToken(&i.DirectoryCredentials)
 		reqd, _ := http.NewRequest("GET", "https://admin.googleapis.com/admin/directory/v1/users/"+userData.Email, nil)
 		reqd.Header.Add("Authorization", "Bearer "+serverAuth.AccessToken)
 		respd, errd := http.DefaultClient.Do(reqd)
@@ -83,7 +109,7 @@ func CompleteOAuth(c *gin.Context, callback SuccessFunc) {
 		json.Unmarshal([]byte(responsed), &userOrgData)
 		// Check if any path matches
 		allowed := false
-		for _, element := range strings.Split(os.Getenv("G_OAUTH_DIRECTORY"), ",") {
+		for _, element := range i.Directories {
 			if element == userOrgData.Directory {
 				allowed = true
 			}

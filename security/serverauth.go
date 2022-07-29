@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 
 	"github.com/factorycampus/go-google-corp-auth/models"
 	"github.com/golang-jwt/jwt"
@@ -16,42 +15,53 @@ import (
 	"time"
 )
 
-var currentLogin models.GoogleResponse
-var end int
-
-func ServerAuthToken() models.GoogleResponse {
-	if currentLogin.AccessToken == "" || end-60 < int(time.Now().Unix()) {
-		token := createJWT()
-		currentLogin = doAuthRequest(token)
-		end = int(time.Now().Unix()) + currentLogin.ExpiresIn
-	}
-	return currentLogin
+type GoGoogleCorpAuthDirectoryCredentials struct {
+	ServiceAccountMail       string      `json:"sa_mail"`
+	ServiceAccountPrivateKey string      `json:"sa_priv_key"`
+	AdminAcccountMail        string      `json:"admin_mail"`
+	loginCache               *LoginCache `json:"-"`
 }
 
-func createJWT() string {
+type LoginCache struct {
+	currentLogin *models.GoogleResponse
+	invalidTime  time.Time
+}
+
+func ServerAuthToken(c *GoGoogleCorpAuthDirectoryCredentials) models.GoogleResponse {
+	if c.loginCache == nil || c.loginCache.invalidTime.Before(time.Now()) {
+		c.loginCache = &LoginCache{}
+		token := createJWT(*c)
+		login := doAuthRequest(token)
+		c.loginCache.currentLogin = &login
+		c.loginCache.invalidTime = time.Now().Add(time.Duration((c.loginCache.currentLogin.ExpiresIn - 60)) * time.Second)
+	}
+	return *c.loginCache.currentLogin
+}
+
+func createJWT(c GoGoogleCorpAuthDirectoryCredentials) string {
 	start := time.Now().Unix()
 	end := time.Now().Unix() + (60 * 60)
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iss":   os.Getenv("G_OAUTH_DIRECTORY_SA_EMAIL"),
+		"iss":   c.ServiceAccountMail,
 		"scope": "https://www.googleapis.com/auth/admin.directory.user.readonly",
 		"aud":   "https://oauth2.googleapis.com/token",
-		"sub":   os.Getenv("G_OAUTH_DIRECTORY_USER_EMAIL"),
+		"sub":   c.AdminAcccountMail,
 		"exp":   end,
 		"iat":   start,
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
-	_privKeyPem, _ := base64.StdEncoding.DecodeString(os.Getenv("G_OAUTH_DIRECTORY_PRIVATEKEY"))
+	_privKeyPem, _ := base64.StdEncoding.DecodeString(c.ServiceAccountPrivateKey)
 	pem, _ := pem.Decode(_privKeyPem)
 	key, err := x509.ParsePKCS8PrivateKey(pem.Bytes)
 	if err != nil {
-		print("Error while reading PEM")
+		print("[G-O Auth] Error while reading PEM")
 		print(string(err.Error()))
 	}
 	tokenString, err1 := token.SignedString(key)
 	if err1 != nil {
-		print("Error while signing JWT")
+		print("[G-O Auth] Error while signing JWT")
 		print(string(err1.Error()))
 	}
 	return tokenString
@@ -63,15 +73,15 @@ func doAuthRequest(jwt string) models.GoogleResponse {
 		"assertion":  {jwt},
 	})
 	if err != nil {
-		panic("Could not connect to Google for Server Token")
+		panic("[G-O Auth] Could not connect to Google for Server Token")
 	}
 	if resp.StatusCode != 200 {
-		panic("Could not login to Google with Server Token")
+		panic("[G-O Auth] Could not login to Google with Server Token")
 	}
 	defer resp.Body.Close()
 	response, err := io.ReadAll(resp.Body)
 	var loginData models.GoogleResponse
 	json.Unmarshal([]byte(response), &loginData)
-	print("Logged In Service Account\n")
+	println("[G-O Auth] Logged In Service Account")
 	return loginData
 }

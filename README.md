@@ -2,10 +2,9 @@
 Uses Google Social Auth in a Go Gin app to authorize a login in an corporate environment.
 
 ## Usage
-Call "controllers.StartOAuth" and "controllers.CompleteOAuth" in the gin handlers.
 You can find the implementation details in [the example](https://github.com/FactoryCampus/go-google-corp-auth/blob/main/example/example.go).
 
-Set the following environment variables.
+When using the `Default()` method use set the following environment variables.
 - G_OAUTH_CLIENT: Client for OAuth
 - G_OAUTH_KEY: Key for OAuth
 - G_OAUTH_REDIRECT_URL: URL to redirect to after Google OAuth. This should be your complete handler
