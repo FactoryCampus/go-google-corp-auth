@@ -52,7 +52,11 @@ func createJWT(c GoGoogleCorpAuthDirectoryCredentials) string {
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
-	_privKeyPem, _ := base64.StdEncoding.DecodeString(c.ServiceAccountPrivateKey)
+	_privKeyPem, err := base64.StdEncoding.DecodeString(c.ServiceAccountPrivateKey)
+	if err != nil {
+		print("[G-O Auth] Error while decoding private key")
+		print(string(err.Error()))
+	}
 	pem, _ := pem.Decode(_privKeyPem)
 	key, err := x509.ParsePKCS8PrivateKey(pem.Bytes)
 	if err != nil {
